@@ -62,72 +62,41 @@ def summarize_by_step(df, chamber):
 
     return summary_df
 
-def summary_analysis(chamber):
-    df= pd.read_csv('CH_'+chamber+" summary_by_step.csv")
-    df['time'] = df['start']
-    df['time'] = pd.to_datetime(df['time'])
+def summary_analysis(data, chamber, param):
+    step_l = list(set(data['step']))
+    print(data['step'].value_counts())
 
-    step_l = list(set(df['step']))
-
-    param = 'Ch C MFC 2 Flow x1000'
-    sum_df = pd.DataFrame(df.loc[df['step']==1,'time'])
-    
+    diff={param:[], "current":[], "previous":[]}
+    index_l ={}
+    # 각 step별 데이터들의 index 리스트
     for step in step_l:
-        diff_df = pd.DataFrame(df.loc[df['step']==step,['time', 'step',param]])
-        diff_df["previous"] = df.loc[df['step']==step,['time', 'step',param]].shift(1)[param]
-        diff_df["diff"] = abs(diff_df[param]-diff_df["previous"])
-        sum_df[step] = diff_df["diff"]
-        plt.figure(figsize=(16,8), dpi=100)
-        plt.plot(diff_df["time"], diff_df["diff"], label = step) 
-        vs.plot_windows(chamber)
-        plt.legend(loc='upper right')
-        plt.show()
-    print(sum_df)
+        index_l[step] = list(data[data['step']==step].index)
 
-# 1 step이 오기전까지 묶는 
-def step_summary(chamber):
-    # data read
-    df = pd.read_csv('CH_'+chamber+" summary_by_step.csv")
-    df['time'] = df['start']
-    df['time'] = pd.to_datetime(df['time'])
 
-    # # step -1 제거
-    # idx =df[df.step==-1].index
-    # df=df.drop(idx)
+    for index in data.index:
+        if index % 1000 == 0: print('processing ...', index)
+        step = data.loc[index]['step']
 
-    # visualization
-    # for parameter in df.columns[3:]:
-    #     vs.scatter_plot(df, parameter, chamber, group_by = "step", show = True, save = False)
-    step = list(set(df['step']))
-    step.sort()
-    columns = ['time']+step
-    
-    sum_df = pd.DataFrame(columns = columns)
+        # 동일한 step을 가진 데이터 중 이전 주기 데이터
+        previous_index = index_l[step].index(index)-1
+        if previous_index<0 : previous_index=0
+        previous_index = index_l[step][previous_index]
 
-    parameter = 'Ch C MFC 2 Flow x1000'
-    info ={}
-    for index in df.index:
-        row = df.loc[index]
-        value = row[parameter]
-
-        if row['step'] ==1:
-            sum_df = sum_df.append(info, ignore_index = True)
-
-            info['time'] = row['time']
-            info[row['step']] =  value
-        else:
-            info[row['step']] =  value
-    sum_df.to_csv(parameter+" summary_by_step.csv", sep=',')
+        current_value = data.loc[index][param]
+        previous_value = data.loc[previous_index][param]
         
-    # print(df['step'])
-    # step_list = list(set(df['step']))
-    # step_list.sort()
-    # print(step_list)
+        diff["current"].append(current_value)
+        diff["previous"].append(previous_value)
 
-    # step_df = pd.DataFrame()
-    # for step in step_list:
-    #     print(step)
-    #     print(df.loc[df['step']==step,param])
+        diff[param].append(current_value- previous_value)
+        
+
+    diff_df=pd.DataFrame(diff)
+    
+    diff_df['time']=data['time']
+    diff_df['step']=data['step']
+    print(diff_df)
+    vs.plot (diff_df, param, chamber, show = True, save = False, save_folder = "")
 
 def str2date(str_date):
     # 함수 선언 : 시간 값 string -> datetime으로 변환
@@ -257,23 +226,23 @@ def DynamicTimeWarping(df):
         print(param+" and "+parameter+"'s dtw: "+str(distance))
 
 # 다양한 시각화를 진행할 수 있는 함수
-def visualization(df, save_folder, chamber):
+def visualization(df, save_folder, chamber, show=True, save = False):
     # 실수 형식의 데이터만 분석
     for parameter in df.select_dtypes('number').columns :
         #line plot (by time)
-        vs.plot(df, parameter, chamber, show=False, save = True, save_folder = save_folder)
+        vs.plot(df, parameter, chamber, show=show, save = save, save_folder = save_folder)
 
         # scatter plot (by recipe)
-        #vs.scatter_plot(df, parameter, chamber, group_by = "recipe", show = False, save = True, save_folder = save_folder)
+        vs.scatter_plot(df, parameter, chamber, group_by = "Ch "+chamber+" Running Recipe", show = show, save = save, save_folder = save_folder)
 
         # scatter plot (by step)
-        #vs.scatter_plot(df, parameter, chamber, group_by = "step", show = False, save = True, save_folder = save_folder)
+        vs.scatter_plot(df, parameter, chamber, group_by = "Ch "+chamber+" Step Number", show = show, save = save, save_folder = save_folder)
 
         # box plot (by step)
-        #vs.box_plot(df, parameter, chamber, group_by = "step", show = False, save = True, save_folder = save_folder)
+        vs.box_plot(df, parameter, chamber, group_by = "Ch "+chamber+" Step Number", show = show, save = save, save_folder = save_folder)
 
         # historam
-        #vs.histogram(df, parameter, show=False, save=True, save_folder = save_folder)
+        vs.histogram(df, parameter, show=show, save=save, save_folder = save_folder)
 
 # 상관계수를 계산, 시각화하는 함수
 def correlation(df, chamber, save_folder):
@@ -299,33 +268,118 @@ def periodity_analysis(chamber):
         vs.plot (df, step, chamber, show = True, save = False, save_folder = "")
 
 
-# 학습 데이터와 테스트 데이터로 구분하는 함수
-def data_split(df, chamber, percent, x, y = None):
-    before_x = x[:int(len(x)*percent)]
-    after_x = x[-int(len(x)*percent):]
-    x_train = pd.concat([before_x, after_x])
-    x_test = x[int(len(x)*percent):-int(len(x)*percent)]
+def DataAnalysis():
+    parameters = [param for param in data.select_dtypes('number').columns if param not in ['slot', 'step', 'stepname','Ch 1 Wafer Source Slot', 'Ch 1 Step Number' ]]
+    # #print(parameters)
+    
+    # param_1 = [
+    #     'Ch 1 Pressure In mtorr', 
+    #     'Ch 1 Pressure In ntorr',
+    #     'Ch 1 Pressure In utorr' 
 
-    if y!=None and not y.empty:
-        before_y = y[:int(len(y)*percent)]
-        after_y = y[-int(len(y)*percent):]
-        y_train = pd.concat([before_y, after_y])
-        y_test = y[int(len(y)*percent):-int(len(y)*percent)]
-        return x_train, x_test, y_train, y_test
+    #     # 'Ch 1 Onboard Cryo Temp 1st Stage',
+    #     # 'Ch 1 Onboard Cryo Temp 2nd Stage'
+
+    #     # 'PVD Ch 1 DC Current', 
+    #     # 'PVD Ch 1 DC Voltage', 
+    #     # 'PVD Ch 1 DC Power Actual', 
+
+    #     # 'Ch 1 Foreline Pressure', 
+    #     # 'Vent Gas Pressure', 
+    #     # 'Slit Pneumatic Air Pressure', 
+        
+    #     # 'Ch 1 MFC 1 Flow x1000', 
+    #     # 'Ch 1 MFC 2 Flow x1000'
+    
+    #     ]
+    # param_C = [
+    #     'Ch C Pressure In utorr', 
+    #     'Ch C Pressure In ntorr', 
+    #     'Ch C Pressure In mtorr',
+
+    #     'Ch C DC Bias', 
+        
+    #     'Ch C RF1 Forward Power', 
+    #     'Ch C RF1 Reflected Power', 
+    #     'Ch C RF2 Forward Power', 
+    #     'Ch C RF2 Reflected Power', 
+
+    #     'Ch C MFC 1 Flow x1000', 
+    #     'Ch C MFC 2 Flow x1000', 
+        
+    #     'Ch C Foreline Pressure', 
+    #     'Vent Gas Pressure',  
+    #     'Slit Pneumatic Air Pressure'
+
+    #     # 'Chamber C Preventive Maintenance RF Used'
+    # ]
+
+    # if chamber == "1":
+    #     X = data[param_1]
+    # elif chamber == "C":
+    #     X = data[param_C]
+    # else:
+    #     X = data[param_D]
+
+    # split_percent = 0.4
+    # x_train, x_test = data_split(data, chamber, split_percent, X, middle=False, visualization = True )
+    # x_train = X[:int(len(X)*0.1)]
+    # x_test = X[int(len(X)*0.2):int(len(X)*0.4)]
+    
+    # print("data splitted")
+
+    # #AnomalyDetection(data, chamber, "IsolationForest", split_percent, x_train, x_test, scoring=False, contamination =0.0001, show_params = False, show= True, save=False)
+   
+
+# 학습 데이터와 테스트 데이터로 구분하는 함수
+def data_split(df, chamber, percent, x, y = None, middle=False, visualization = False, ):
+
+    if middle == True:
+        before_x = x[:int(len(x)*percent)]
+        after_x = x[-int(len(x)*percent):]
+        x_train = pd.concat([before_x, after_x])
+        x_test = x[int(len(x)*percent):-int(len(x)*percent)]
+
+        if y!=None and not y.empty:
+            before_y = y[:int(len(y)*percent)]
+            after_y = y[-int(len(y)*percent):]
+            y_train = pd.concat([before_y, after_y])
+            y_test = y[int(len(y)*percent):-int(len(y)*percent)]
+            return x_train, x_test, y_train, y_test
+
+        # data split visualization
+        if visualization == True:
+            plt.figure(figsize=(16,8), dpi=100)
+            time = df['time']
+            param = x.columns[0]
+            plt.title(param+" Data Split : "+str(percent))
+            plt.plot(time[:int(len(time)*percent)], before_x[param], color ='grey')
+            plt.plot(time[int(len(time)*percent):-int(len(time)*percent)], x_test[param])
+            plt.plot(time[-int(len(time)*percent):], after_x[param], color ='grey')
+            vs.plot_windows(chamber)
+            plt.show()
+    else:
+        x_train = x[:int(len(x)*percent)]
+        x_test = x[int(len(x)*percent):]
+
+        if y!=None and not y.empty:
+            y_train = y[:int(len(y)*percent)]
+            y_test = y[int(len(y)*percent):]
+            return x_train, x_test, y_train, y_test
+        
+        # data split visualization
+        if visualization == True:
+            plt.figure(figsize=(16,8), dpi=100)
+            time = df['time']
+            param = x.columns[0]
+            plt.title(param+" Data Split : "+str(percent))
+            plt.plot(time[:int(len(time)*percent)], x_train[param], color ='grey')
+            plt.plot(time[int(len(time)*percent):], x_test[param])
+            vs.plot_windows(chamber)
+            plt.show()
 
     ## scikit-learn easy method
     #x_train, x_test = train_test_split(x, test_size=0.25, random_state=0, shuffle=False)
-
-    # data split visualization
-    # plt.figure(figsize=(16,8), dpi=100)
-    # time = df['time']
-    # param = x.columns[0]
-    # plt.title(param+" Data Split : "+str(percent))
-    # plt.plot(time[:int(len(time)*percent)], before_x[param], color ='grey')
-    # plt.plot(time[int(len(time)*percent):-int(len(time)*percent)], x_test[param])
-    # plt.plot(time[-int(len(time)*percent):], after_x[param], color ='grey')
-    # vs.plot_windows(chamber)
-    # plt.show()
 
     return x_train, x_test
 
@@ -455,7 +509,7 @@ def AnomalyDetection(df, chamber, model, percent, x_train, x_test, scoring=True,
         os.makedirs(save_path, exist_ok=True)
         plt.savefig(os.path.join(save_path, param+'.png'), bbox_inches='tight', pad_inches=0.0)
 
-def ImportData(chamber, original=True):
+def ImportFDCData(chamber, original=True):
     if original == True:
         # data read
         data = pd.read_csv("./3. SPU01-FDC DATA/CH_"+chamber+"/SPU-01 CH_"+chamber+" FDC DATA.csv")
@@ -468,116 +522,95 @@ def ImportData(chamber, original=True):
         data['time'] = pd.to_datetime(data['start'])
     return data
 
+def DB_connecting(recent=10000):
+    # pip install pymysql
+
+    import pymysql
+    import pandas as pd
+
+    #필요한 기본 DB 정보
+    host = "192.168.100.203" #접속할 db의 host명
+    user = "root" #접속할 db의 user명
+    port = 3306
+    pw = "nepes" #접속할 db의 password
+    db = "sputter_db" #접속할 db의 table명 (실제 데이터가 추출되는 table)
+
+
+    #DB에 접속
+    conn = pymysql.connect( host= host,
+                            user = user,
+                            port = port,
+                            password = pw,
+                            db = db)
+
+
+    #실제 사용 될 sql쿼리 문
+    sql = "SELECT * FROM sputter_db.`SPU-01-DETAIL`;"
+
+
+
+    df = pd.read_sql_query(sql, conn)
+    if len(df)>= recent : df= df[-recent:]
+    print("DB connection finished")
+
+    #db 접속 종료
+    conn.close()
+
+    # null data 삭제
+    nonNull_params = []
+
+    for column in df.columns:
+        if df[column].isnull().sum() != len(df):
+            nonNull_params.append(column)
+
+    df = df[nonNull_params]
+
+    # parameter naming (숫자로 되어있는 열을 공정 파라미터로 바꿔줌)
+    columns = {"TIMESTAMP":"time"}
+    varID_df = pd.read_csv("./parameter_variableID.csv")
+    for param in df.columns[4:]:
+        columns[param] = str(varID_df[varID_df["VARIABLE_ID"]==int(param)]["PARAMETER_NAME"].values[0])
+    df.rename(columns=columns, inplace = True)
+
+    # Timestamp 형식으로 바꾸기
+    df['time'] = pd.to_datetime(df['time'])
+    
+    return df
+
+
 if __name__ == '__main__':
+    import datetime
+    now = str(datetime.datetime.now())
+
     # 분석할 데이터의 챔버를 설정
+    Chamber_list = ["C", "D", "1", "2", "3", "4"]
     chamber = "1"
-    data = ImportData(chamber, original=False)
 
-    #save_path = '4. 개인 분석 자료/plot result/CH'+chamber
-    save_path = '4. 개인 분석 자료/step summary/CH'+chamber
-    os.makedirs(save_path, exist_ok=True)
-
-    step_l = list(set(data['step']))
-    print(data['step'].value_counts())
-
- 
-    param = 'Ch 1 MFC 2 Flow x1000'
-    diff={param:[], "current":[], "previous":[]}
-    index_l ={}
-    # 각 step별 데이터들의 index 리스트
-    for step in step_l:
-        index_l[step] = list(data[data['step']==step].index)
-
-
-    for index in data.index[:20]:
-        #if index % 10000 == 0: print('processing ...', index)
-        step = data.loc[index]['step']
-
-        # 동일한 step을 가진 데이터 중 이전 주기 데이터
-        previous_index = index_l[step].index(index)-1
-        if previous_index<0 : previous_index=0
-        previous_index = index_l[step][previous_index]
-
-        current_value = data.loc[index][param]
-        previous_value = data.loc[previous_index][param]
-        
-        diff["current"].append(current_value)
-        diff["previous"].append(previous_value)
-
-        diff[param].append(current_value- previous_value)
-        
-
-    diff_df=pd.DataFrame(diff)
-    print(diff_df)
-
+    # DB 데이터 사용 시
+    recent = 300000 # 최근 몇 개까지의 데이터를 가져올지 설정
+    data = DB_connecting(recent=recent)
+    save_path = '8. DB raw 데이터 분석 자료/'
+    os.makedirs(save_path+"RAW DATA", exist_ok=True)
+    data.to_csv(save_path+"RAW DATA/"+now+".csv" , sep=',')
     
-    # shift_df = data.shift(step_length)
-    # print(data[param])
-    # print(shift_df[param])
-    # diff_df = pd.DataFrame()
-    # diff_df[param] = data[param] - shift_df[param]
-    
-    diff_df['time']=data['time'][:20]
-    diff_df['step']=data['step'][:20]
-    print(diff_df)
-    vs.plot (diff_df, param, chamber, show = True, save = False, save_folder = "")
 
-    parameters = [param for param in data.select_dtypes('number').columns if param not in ['slot', 'step', 'stepname','Ch 1 Wafer Source Slot', 'Ch 1 Step Number' ]]
-    #print(parameters)
-    
-    param_1 = [
-        'Ch 1 Pressure In mtorr', 
-        'Ch 1 Pressure In ntorr',
-        'Ch 1 Pressure In utorr' 
+    # FDC csv 파일 사용 시
+    # data = ImportFDCData(chamber, original=True)
 
-        # 'Ch 1 Onboard Cryo Temp 1st Stage',
-        # 'Ch 1 Onboard Cryo Temp 2nd Stage'
+    for chamber in Chamber_list:
+        # 분석 결과 저장 파일 설정
+        save_folder = save_path+'CH_'+chamber+"/"+now
+        os.makedirs(save_folder, exist_ok=True)
 
-        # 'PVD Ch 1 DC Current', 
-        # 'PVD Ch 1 DC Voltage', 
-        # 'PVD Ch 1 DC Power Actual', 
+        # 특정 챔버 데이터 가져오기
+        param_by_chamber=['time']
+        for param in data.columns:
+            if "Chamber "+chamber in param or "Ch "+chamber in param: param_by_chamber.append(param)
 
-        # 'Ch 1 Foreline Pressure', 
-        # 'Vent Gas Pressure', 
-        # 'Slit Pneumatic Air Pressure', 
-        
-        # 'Ch 1 MFC 1 Flow x1000', 
-        # 'Ch 1 MFC 2 Flow x1000'
-    
-        ]
-    param_C = [
-        'Ch C Pressure In utorr', 
-        'Ch C Pressure In ntorr', 
-        'Ch C Pressure In mtorr',
+        df = data[param_by_chamber]
+        print(df.columns)
 
-        'Ch C DC Bias', 
-        
-        'Ch C RF1 Forward Power', 
-        'Ch C RF1 Reflected Power', 
-        'Ch C RF2 Forward Power', 
-        'Ch C RF2 Reflected Power', 
+        visualization(df, save_folder, chamber, show= False, save=True)
 
-        'Ch C MFC 1 Flow x1000', 
-        'Ch C MFC 2 Flow x1000', 
-        
-        'Ch C Foreline Pressure', 
-        'Vent Gas Pressure',  
-        'Slit Pneumatic Air Pressure'
-
-        # 'Chamber C Preventive Maintenance RF Used'
-    ]
-
-    if chamber == "1":
-        X = data[param_1]
-    elif chamber == "C":
-        X = data[param_C]
-    else:
-        X = data[param_D]
-
-    split_percent = 0.3
-    x_train, x_test = data_split(data, chamber, split_percent, X)
-    print("data splitted")
-
-    #AnomalyDetection(data, chamber, "IsolationForest", split_percent, x_train, x_test, scoring=False, contamination =0.0001, show_params = False, show= True, save=False)
-    
+   
 
