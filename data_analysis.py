@@ -4,7 +4,7 @@ import pandas as pd
 from pandas import Series, DataFrame
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import json
 import matplotlib
 
 from sklearn.model_selection import train_test_split
@@ -386,8 +386,8 @@ def data_split(df, chamber, percent, x, y = None, middle=False, visualization = 
 def RandomForest(df, chamber):
     time = df['time']
     # 연속 분포
-    X = df[['Ch 1 Pressure In utorr','Ch 1 Pressure In mtorr']]
-    Y = df[['Ch 1 MFC 2 Flow x1000'] ]
+    X = df[['Ch C Step Number']]
+    Y = df[['Ch C Pressure In utorr']]
 
     # # scikit-learn easy method
     # x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.30, random_state=42, shuffle=False)
@@ -471,43 +471,43 @@ def AnomalyDetection(df, chamber, model, percent, x_train, x_test, scoring=True,
           
 
     # result visualization
-    time = df['time']
-    if show_params ==  True :  
-        fig, ax = plt.subplots(len(x_train.columns)+1,1, figsize=(16,8),constrained_layout=True)
-        for i in range(len(x_train.columns)):
-            param = x_train.columns[i]
-            ax[i].set_title(param)
-            ax[i].plot(time[:slicing], x_train[param][:slicing], color="grey", label="training")
-            ax[i].plot(time[-slicing:], x_train[param][-slicing:], color="grey")
-            ax[i].plot(time[slicing:-slicing], x_test[param], label="test")
-            ax[i].legend(loc='upper right')
+    # time = df['time']
+    # if show_params ==  True :  
+    #     fig, ax = plt.subplots(len(x_train.columns)+1,1, figsize=(16,8),constrained_layout=True)
+    #     for i in range(len(x_train.columns)):
+    #         param = x_train.columns[i]
+    #         ax[i].set_title(param)
+    #         ax[i].plot(time[:slicing], x_train[param][:slicing], color="grey", label="training")
+    #         ax[i].plot(time[-slicing:], x_train[param][-slicing:], color="grey")
+    #         ax[i].plot(time[slicing:-slicing], x_test[param], label="test")
+    #         ax[i].legend(loc='upper right')
 
-        ax[len(X.columns)].set_title('anomaly result from '+model)
-        ax[len(X.columns)].plot(time[:slicing], train_pred[:slicing], c='grey', label="training")
-        ax[len(X.columns)].plot(time[-slicing:], train_pred[-slicing:], c='grey')
-        ax[len(X.columns)].plot(time[slicing:-slicing], test_pred, c='red', label="prediction")
-        vs.plot_windows(chamber)
-        ax[len(X.columns)].legend(loc='upper right')
-    else:
-        plt.figure(figsize=(16,8), dpi=100)
+    #     ax[len(X.columns)].set_title('anomaly result from '+model)
+    #     ax[len(X.columns)].plot(time[:slicing], train_pred[:slicing], c='grey', label="training")
+    #     ax[len(X.columns)].plot(time[-slicing:], train_pred[-slicing:], c='grey')
+    #     ax[len(X.columns)].plot(time[slicing:-slicing], test_pred, c='red', label="prediction")
+    #     vs.plot_windows(chamber)
+    #     ax[len(X.columns)].legend(loc='upper right')
+    # else:
+    #     plt.figure(figsize=(16,8), dpi=100)
 
-        plt.title('anomaly score from '+model)
-        plt.plot(time[:slicing], train_pred[:slicing], c='grey', label="training")
-        plt.plot(time[-slicing:], train_pred[-slicing:], c='grey')
-        plt.plot(time[slicing:-slicing], test_pred, c='red', label="prediction")
-        vs.plot_windows(chamber)
-        plt.legend(loc='upper right') 
+    #     plt.title('anomaly score from '+model)
+    #     plt.plot(time[:slicing], train_pred[:slicing], c='grey', label="training")
+    #     plt.plot(time[-slicing:], train_pred[-slicing:], c='grey')
+    #     plt.plot(time[slicing:-slicing], test_pred, c='red', label="prediction")
+    #     vs.plot_windows(chamber)
+    #     plt.legend(loc='upper right') 
         
         
 
     # 그래프를 모니터 화면에 직접 보고 싶을 때
-    if show == True : plt.show()
+    # if show == True : plt.show()
 
-    # png 파일로 그래프 결과를 저장하고 싶을 때
-    elif save == True :
-        save_path = '4. 개인 분석 자료/plot result/CH'+chamber+"/isolation_forest"
-        os.makedirs(save_path, exist_ok=True)
-        plt.savefig(os.path.join(save_path, param+'.png'), bbox_inches='tight', pad_inches=0.0)
+    # # png 파일로 그래프 결과를 저장하고 싶을 때
+    # elif save == True :
+    #     save_path = '4. 개인 분석 자료/plot result/CH'+chamber+"/isolation_forest"
+    #     os.makedirs(save_path, exist_ok=True)
+    #     plt.savefig(os.path.join(save_path, param+'.png'), bbox_inches='tight', pad_inches=0.0)
 
 def ImportFDCData(chamber, original=True):
     if original == True:
@@ -577,29 +577,21 @@ def DB_connecting(recent=10000):
     
     return df
 
-
-if __name__ == '__main__':
-    import datetime
-    now = str(datetime.datetime.now())
-
-    # 분석할 데이터의 챔버를 설정
+def DB_2_CSV(recent=10000):
+    # CSV 파일로 변환할 챔버 목록
     Chamber_list = ["C", "D", "1", "2", "3", "4"]
-    chamber = "1"
 
-    # DB 데이터 사용 시
-    recent = 300000 # 최근 몇 개까지의 데이터를 가져올지 설정
-    data = DB_connecting(recent=recent)
+    data = DB_connecting(recent=recent) # 최근 몇 개까지의 데이터를 가져올지 설정
+
     save_path = '8. DB raw 데이터 분석 자료/'
     os.makedirs(save_path+"RAW DATA", exist_ok=True)
-    data.to_csv(save_path+"RAW DATA/"+now+".csv" , sep=',')
+    file_name = str(data.iloc[0]['time'])+"~"+str(data.iloc[len(data)-1]['time'])+"_"+str(recent)
+
+    data.to_csv(save_path+"RAW DATA/"+file_name+".csv" , sep=',')
     
-
-    # FDC csv 파일 사용 시
-    # data = ImportFDCData(chamber, original=True)
-
     for chamber in Chamber_list:
         # 분석 결과 저장 파일 설정
-        save_folder = save_path+'CH_'+chamber+"/"+now
+        save_folder = save_path+'CH_'+chamber+"/"+file_name
         os.makedirs(save_folder, exist_ok=True)
 
         # 특정 챔버 데이터 가져오기
@@ -611,6 +603,103 @@ if __name__ == '__main__':
         print(df.columns)
 
         visualization(df, save_folder, chamber, show= False, save=True)
+
+# categorical value인 recipe를 numeric value로 변환
+def RecipeEncoding(df, chamber):
+    # 챔버별 recipe를 저장한 json 파일 Import
+    with open('./99. src/recipe_list.json', 'r') as f:
+        json_data = json.load(f)
+    
+    recipe_in_data = set(df["Ch "+chamber+" Running Recipe"])
+    recipe_in_json = json_data["CH_"+chamber]
+
+    for recipe in recipe_in_data:
+        # json 파일에 없는 레시피가 들어오는 경우, json파일에 해당 레시피를 추가
+        if recipe not in recipe_in_json: 
+            json_data["CH_"+chamber].append(recipe)
+            recipe_in_json.append(recipe)
+   
+        # categorical value인 recipe를 numeric value로 변환
+        df.loc[df["Ch "+chamber+" Running Recipe"]==recipe,"Ch "+chamber+" Running Recipe"] = recipe_in_json.index(recipe)
+
+    with open('./99. src/recipe_list.json', 'w') as f:
+            json.dump(json_data, f, indent=4)
+
+    print(df["Ch "+chamber+" Running Recipe"])
+    return df
+
+
+if __name__ == '__main__':
+    
+    # 실시간 데이터 베이스 내용 csv파일 저장 및 visualization
+    DB_2_CSV(recent=100000) # 최근 몇 개까지의 데이터를 가져올지 설정
+
+    # chamber = "C"
+
+    # # FDC csv 파일 사용 시
+    # df = ImportFDCData(chamber, original=True)
+    # df = RecipeEncoding(df, chamber)
+    
+    # params = ['Ch C Pressure In mtorr', 'Ch C Pressure In ntorr', 'Ch C Pressure In utorr', 'Ch C MFC 1 Flow x1000', 'Ch C MFC 2 Flow x1000']
+    # risk_result = pd.DataFrame(columns=params)
+    # for param in params:
+    #     X = df[['Ch C Step Number']]
+    #     Y = df[[param]]
+
+    #     percent = 0.5
+    #     slicer = int(len(df)*percent)
+    #     x_train = X[:slicer]
+    #     y_train = Y[:slicer]
+    #     x_test = X[slicer:]
+    #     y_test = Y[slicer:]
+
+    #     from sklearn.metrics import f1_score, precision_score, recall_score
+        
+    #     from sklearn.ensemble import RandomForestRegressor
+    #     regr = RandomForestRegressor(n_estimators = 100, random_state = 0)
+    #     regr.fit(x_train, y_train)
+    #     y_pred = regr.predict(x_test)
+    #     score = regr.score(x_test, y_test)
+    #     print(param+' 예측 정확도: %.2f'%score)
+
+    #     pred_diff = y_test[param] - y_pred
+    #     risk_score = pred_diff 
+    #     risk_result[param] = risk_score
+
+    #     #파라미터별 개별적인 예측 결과를 알고 싶을 때 시각화
+    #     fig, ax = plt.subplots(4,1, figsize=(16,8),constrained_layout=True)
+    #     ax[0].plot(df['time'][:slicer], y_train[param], c='grey', label="train data")
+    #     ax[0].plot(df['time'][slicer:], y_test[param],  label="test data")
+    #     ax[0].set_title(param+": divided by "+str(percent*100)+"%")
+    #     ax[0].legend()
+
+    #     ax[1].plot(df['time'][slicer:], y_test[param], c='grey', label="y_label")
+    #     ax[1].set_title("label(test) data")
+    #     ax[1].legend()
+
+    #     ax[2].plot(df['time'][slicer:], y_pred, c="blue", label="prediction")
+    #     ax[2].set_title("prediction score : "+str(score))
+    #     ax[2].legend()
+
+    #     ax[3].plot(df['time'][slicer:], risk_score, c='red', label="risk score")
+    #     ax[3].set_title("risk_score")
+    #     vs.plot_windows("C")
+    #     ax[3].legend()
+
+    #     plt.show()
+    
+    # final_risk_score = risk_result.sum(axis=1)
+    # #result visualization
+    # plt.figure(figsize=(16,8), dpi=100)
+    # plt.plot(df['time'][slicer:], final_risk_score, c="grey", label="risk score")
+    # vs.plot_windows("C")
+    # plt.title("pressure risk function : "+", ".join(params))
+    # plt.legend()
+    # plt.show()
+
+    
+
+    
 
    
 
